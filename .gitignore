@@ -85,9 +85,14 @@ Table_Euroc
 Table_TUMVI_rooms/
 *.pyc
 *.osa
+*.log
 .idea/
 my_settings.txt
 
 borrar/*
 
 */ExecMean.txt
+
+orbslam3ros2/build/*
+orbslam3ros2/install/*
+orbslam3ros2/log/*
