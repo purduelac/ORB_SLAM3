@@ -1,0 +1,5 @@
+{
+    "name": "ROS Humble",
+    "dockerFile": "Dockerfile",  // Path to Dockerfile in the same folder
+    "context": "..",                // Use the parent directory as the context for building the image
+  }
