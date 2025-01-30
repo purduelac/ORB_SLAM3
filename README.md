@@ -1,3 +1,5 @@
+Fork of ORB-SLAM3 with ROS2 stereo_inertial and mono_inertial nodes for ROS2 Humble on Ubuntu 22.04.
+
 # ORB-SLAM3
 
 ### V1.0, December 22th, 2021
