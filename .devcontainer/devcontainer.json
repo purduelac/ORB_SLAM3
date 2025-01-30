@@ -1,6 +1,8 @@
 {
     "name": "ROS Humble",
     "dockerFile": "Dockerfile",  // Path to Dockerfile in the same folder
-    "context": "..",                // Use the parent directory as the context for building the image
- //   "postCreateCommand": "chmod +x build.sh && ./build.sh"
+    "context": "..",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/ORB_SLAM3,type=bind",
+    "workspaceFolder": "/workspace/",
+    "postCreateCommand": "cd /workspace/ORB_SLAM3 && chmod +x build.sh && ./build.sh"
   }
