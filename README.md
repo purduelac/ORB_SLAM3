@@ -1,5 +1,9 @@
 Fork of ORB-SLAM3 with ROS2 stereo_inertial and mono_inertial nodes for ROS2 Humble on Ubuntu 22.04.
 
+Remember to run `build.sh` in root and then navigate to `orbslam3ros2` and run `colcon build`, followed by `source install/setup.bash`.
+
+ROS Humble devcontainer included for convenience.
+
 # ORB-SLAM3
 
 ### V1.0, December 22th, 2021
