@@ -1,8 +1,53 @@
-{
+// {
+//     "name": "ROS Humble",
+//     "dockerFile": "Dockerfile",  // Path to Dockerfile in the same folder
+//     "context": "..",
+//     "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/ORB_SLAM3,type=bind",
+//     "workspaceFolder": "/workspace/",
+//     "postCreateCommand": "cd /workspace/ORB_SLAM3 && chmod +x build.sh && ./build.sh",
+//     // "runArgs": [
+//     //   "--net", "host",
+//     //   "-e", "DISPLAY=:0",
+//     //   "-e", "XAUTHORITY=/tmp/.Xauthority",
+//     //   "--volume", "${localEnv:HOME}/.Xauthority:/root/.Xauthority:rw",
+//     //   "--env", "QT_QPA_PLATFORM=xcb" // Set the Qt platform plugin
+//     // ],
+//     "runArgs": [
+//       "--env=DISPLAY=:0",
+//       "--env=QT_X11_NO_MITSHM=1",
+//       "--volume=${localEnv:HOME}/.X11-unix:/tmp/.X11-unix:rw"
+//     ],
+//     "containerEnv": {
+//         "DISPLAY": "${localEnv:DISPLAY}", // Set DISPLAY in the container
+//         "QT_QPA_PLATFORM": "xcb" // Ensure Qt uses the xcb plugin
+//     }
+//     // "mounts": [
+//     //     "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached"
+//     //   ],
+//     // "runArgs": ["--privileged"]
+//   }
+
+  {
     "name": "ROS Humble",
-    "dockerFile": "Dockerfile",  // Path to Dockerfile in the same folder
-    "context": "..",
+    "dockerFile": "Dockerfile",
+    "runArgs": [
+        "--env", "DISPLAY=${localEnv:DISPLAY}", // Forward the host's DISPLAY
+        "--volume", "/tmp/.X11-unix:/tmp/.X11-unix", // Mount the X11 socket
+        "--volume", "${env:HOME}/.Xauthority:/root/.Xauthority", // Forward X11 authentication
+        "--privileged"
+        // "--env", "QT_QPA_PLATFORM=xcb" // Set the Qt platform plugin
+    ],
+    "customizations": {
+      "vscode": {
+        "extensions": ["ms-azuretools.vscode-docker", "ms-python.python", "charliermarsh.ruff"]
+      }
+    },
+    // "containerEnv": {
+    //     "DISPLAY": "${localEnv:DISPLAY}", // Set DISPLAY in the container
+    //     // "QT_QPA_PLATFORM": "xcb" // Ensure Qt uses the xcb plugin
+    // },
+    "remoteUser": "root", // Or your preferred user
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/ORB_SLAM3,type=bind",
     "workspaceFolder": "/workspace/",
     "postCreateCommand": "cd /workspace/ORB_SLAM3 && chmod +x build.sh && ./build.sh"
-  }
+}
