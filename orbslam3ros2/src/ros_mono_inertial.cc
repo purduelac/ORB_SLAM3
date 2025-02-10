@@ -128,8 +128,8 @@ int main(int argc, char **argv)
     rclcpp::init(argc, argv);
     
     auto node = rclcpp::Node::make_shared("orb_slam3_mono");
-    node->declare_parameter("vocabulary", "");
-    node->declare_parameter("settings", "");
+    node->declare_parameter("vocabulary", argv[1]);
+    node->declare_parameter("settings", argv[2]);
     node->declare_parameter("do_equalize", false);
 
     string voc_file, settings_file;
