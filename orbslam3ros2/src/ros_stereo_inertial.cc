@@ -1,13 +1,9 @@
-#include <GL/glew.h>
-#include <GL/gl.h>
-
 #include <iostream>
 #include <algorithm>
 #include <fstream>
 #include <chrono>
 #include <vector>
 #include <queue>
-#include <thread>
 #include <mutex>
 
 #include <rclcpp/rclcpp.hpp>
@@ -19,50 +15,60 @@
 
 #include "System.h"
 #include "ImuTypes.h"
+#include "lac_interfaces/msg/stereo_imu.hpp"  // Include the StereoIMU message header
+#include "lac_interfaces/msg/image_pair.hpp"
 
 using namespace std;
-
-class ImuGrabber : public rclcpp::Node
-{
-public:
-    ImuGrabber() : Node("imu_grabber") {}
-    
-    void GrabImu(const sensor_msgs::msg::Imu::ConstSharedPtr &imu_msg)
-    {
-        lock_guard<mutex> lock(mBufMutex);
-        imuBuf.push(imu_msg);
-    }
-
-    queue<sensor_msgs::msg::Imu::ConstSharedPtr> imuBuf;
-    mutex mBufMutex;
-};
 
 class ImageGrabber : public rclcpp::Node
 {
 public:
-    ImageGrabber(ORB_SLAM3::System* pSLAM, shared_ptr<ImuGrabber> pImuGb, bool bRect, bool bClahe) 
-        : Node("image_grabber"), mpSLAM(pSLAM), mpImuGb(pImuGb), do_rectify(bRect), mbClahe(bClahe)
+    ImageGrabber(ORB_SLAM3::System* pSLAM, bool bRect, bool bClahe) 
+        : Node("image_grabber"), mpSLAM(pSLAM), do_rectify(bRect), mbClahe(bClahe)
     {
         mClahe = cv::createCLAHE(3.0, cv::Size(8, 8));
     }
 
-    void GrabImageLeft(const sensor_msgs::msg::Image::ConstSharedPtr& msg)
+    // Callback function to process both images and IMU data synchronously
+    void SyncStereoImu(const lac_interfaces::msg::StereoIMU::SharedPtr stereo_imu_msg)
     {
-        lock_guard<mutex> lock(mBufMutexLeft);
-        if (!imgLeftBuf.empty())
-            imgLeftBuf.pop();
-        imgLeftBuf.push(msg);
+        // Convert images
+        cv::Mat imLeft = GetImage(std::make_shared<sensor_msgs::msg::Image>(stereo_imu_msg->img_pair.left));
+        cv::Mat imRight = GetImage(std::make_shared<sensor_msgs::msg::Image>(stereo_imu_msg->img_pair.right));
+
+        std::cout << " have img " << std::endl;
+
+        // IMU Data processing
+        vector<ORB_SLAM3::IMU::Point> vImuMeas;
+        if (stereo_imu_msg->imu.linear_acceleration.x != 0.0 || stereo_imu_msg->imu.angular_velocity.x != 0.0) {
+            std::cout << " have imu pose " << std::endl;
+            cv::Point3f acc(stereo_imu_msg->imu.linear_acceleration.x, 
+                            stereo_imu_msg->imu.linear_acceleration.y, 
+                            stereo_imu_msg->imu.linear_acceleration.z);
+            cv::Point3f gyr(stereo_imu_msg->imu.angular_velocity.x, 
+                            stereo_imu_msg->imu.angular_velocity.y, 
+                            stereo_imu_msg->imu.angular_velocity.z);
+            vImuMeas.emplace_back(acc, gyr, rclcpp::Time(stereo_imu_msg->img_pair.left.header.stamp).seconds());
+        }
+
+        // Optionally apply CLAHE
+        if(mbClahe) {
+            mClahe->apply(imLeft, imLeft);
+            mClahe->apply(imRight, imRight);
+        }
+
+        // Optionally apply Rectification
+        if(do_rectify) {
+            cv::remap(imLeft, imLeft, M1l, M2l, cv::INTER_LINEAR);
+            cv::remap(imRight, imRight, M1r, M2r, cv::INTER_LINEAR);
+        }
+
+        // Update the SLAM system with the stereo pair and IMU data
+        double tImLeft = rclcpp::Time(stereo_imu_msg->img_pair.left.header.stamp).seconds();
+        mpSLAM->TrackStereo(imLeft, imRight, tImLeft, vImuMeas);
     }
 
-    void GrabImageRight(const sensor_msgs::msg::Image::ConstSharedPtr& msg)
-    {
-        lock_guard<mutex> lock(mBufMutexRight);
-        if (!imgRightBuf.empty())
-            imgRightBuf.pop();
-        imgRightBuf.push(msg);
-    }
-
-    cv::Mat GetImage(const sensor_msgs::msg::Image::ConstSharedPtr &img_msg)
+    cv::Mat GetImage(const sensor_msgs::msg::Image::SharedPtr &img_msg)
     {
         cv_bridge::CvImageConstPtr cv_ptr;
         try {
@@ -74,66 +80,11 @@ public:
         return cv_ptr->image;
     }
 
-    void SyncWithImu()
-    {
-        const double maxTimeDiff = 0.01;
-        while(rclcpp::ok()) {
-            cv::Mat imLeft, imRight;
-            double tImLeft = 0, tImRight = 0;
-            
-            if (!imgLeftBuf.empty() && !imgRightBuf.empty() && !mpImuGb->imuBuf.empty()) {
-                tImLeft = rclcpp::Time(imgLeftBuf.front()->header.stamp).seconds();
-                tImRight = rclcpp::Time(imgRightBuf.front()->header.stamp).seconds();
-
-                // Synchronization logic remains similar
-                // ... (keep existing synchronization code)
-
-                vector<ORB_SLAM3::IMU::Point> vImuMeas;
-                {
-                    lock_guard<mutex> lock(mpImuGb->mBufMutex);
-                    while(!mpImuGb->imuBuf.empty() && 
-                          rclcpp::Time(mpImuGb->imuBuf.front()->header.stamp).seconds() <= tImLeft)
-                    {
-                        auto imu_msg = mpImuGb->imuBuf.front();
-                        cv::Point3f acc(imu_msg->linear_acceleration.x, 
-                                      imu_msg->linear_acceleration.y, 
-                                      imu_msg->linear_acceleration.z);
-                        cv::Point3f gyr(imu_msg->angular_velocity.x, 
-                                      imu_msg->angular_velocity.y, 
-                                      imu_msg->angular_velocity.z);
-                        vImuMeas.emplace_back(acc, gyr, 
-                                            rclcpp::Time(imu_msg->header.stamp).seconds());
-                        mpImuGb->imuBuf.pop();
-                    }
-                }
-
-                // Image processing and tracking
-                if(mbClahe) {
-                    mClahe->apply(imLeft, imLeft);
-                    mClahe->apply(imRight, imRight);
-                }
-
-                if(do_rectify) {
-                    cv::remap(imLeft, imLeft, M1l, M2l, cv::INTER_LINEAR);
-                    cv::remap(imRight, imRight, M1r, M2r, cv::INTER_LINEAR);
-                }
-
-                mpSLAM->TrackStereo(imLeft, imRight, tImLeft, vImuMeas);
-                this_thread::sleep_for(chrono::milliseconds(1));
-            }
-        }
-    }
-
     ORB_SLAM3::System* mpSLAM;
-    shared_ptr<ImuGrabber> mpImuGb;
     bool do_rectify;
     bool mbClahe;
     cv::Mat M1l, M2l, M1r, M2r;
     cv::Ptr<cv::CLAHE> mClahe;
-
-private:
-    queue<sensor_msgs::msg::Image::ConstSharedPtr> imgLeftBuf, imgRightBuf;
-    mutex mBufMutexLeft, mBufMutexRight;
 };
 
 int main(int argc, char **argv)
@@ -166,37 +117,17 @@ int main(int argc, char **argv)
         true
     );
 
-    auto imu_grabber = make_shared<ImuGrabber>();
-    auto image_grabber = make_shared<ImageGrabber>(&SLAM, imu_grabber, do_rectify, do_equalize);
+    auto image_grabber = make_shared<ImageGrabber>(&SLAM, do_rectify, do_equalize);
 
-    // Setup subscribers
-    auto sub_imu = imu_grabber->create_subscription<sensor_msgs::msg::Imu>(
-        "/imu", 
+    // Setup subscriber for StereoIMU messages
+    auto sub_stereo_imu = image_grabber->create_subscription<lac_interfaces::msg::StereoIMU>(
+        "/stereo_imu", 
         1000, 
-        bind(&ImuGrabber::GrabImu, imu_grabber, placeholders::_1)
+        bind(&ImageGrabber::SyncStereoImu, image_grabber, placeholders::_1)
     );
 
-    auto sub_img_left = image_grabber->create_subscription<sensor_msgs::msg::Image>(
-        "/camera/left/image_raw", 
-        rclcpp::QoS(100), 
-        bind(&ImageGrabber::GrabImageLeft, image_grabber, placeholders::_1)
-    );
-
-    auto sub_img_right = image_grabber->create_subscription<sensor_msgs::msg::Image>(
-        "/camera/right/image_raw", 
-        rclcpp::QoS(100), 
-        bind(&ImageGrabber::GrabImageRight, image_grabber, placeholders::_1)
-    );
-
-    thread sync_thread(&ImageGrabber::SyncWithImu, image_grabber);
-
-    rclcpp::executors::MultiThreadedExecutor executor;
-    executor.add_node(imu_grabber);
-    executor.add_node(image_grabber);
-    executor.spin();
+    rclcpp::spin(node);  // Process messages synchronously
 
     rclcpp::shutdown();
-    sync_thread.join();
-
     return 0;
 }

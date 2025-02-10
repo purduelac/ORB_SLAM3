@@ -11,6 +11,9 @@ find_package(cv_bridge REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(Pangolin REQUIRED)
+find_package(lac_interfaces REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
 pkg_check_modules(OpenCV REQUIRED opencv4)
 link_directories(${OpenCV_LIBRARY_DIRS})
 
@@ -31,11 +34,12 @@ include_directories(
     ${sensor_msgs_INCLUDE_DIRS}
     ${OPENGL_INCLUDE_DIR}
     ${Pangolin_INCLUDE_DIRS}
+    ${lac_interfaces_INCLUDE_DIRS}
 )
 
 add_definitions(-DPANGO_HAS_GL_COPY_IMAGE=0)
 
-# Link directories (if needed, but it's better to link OpenCV through the proper `find_package` step)
+# Link directories (if needed, but it's better to link OpenCV through the proper find_package step)
 link_directories(${ORB_SLAM3_LIB_DIR} /opt/ros/humble/lib)
 
 # Set source files
@@ -49,8 +53,8 @@ ament_target_dependencies(ros_mono_inertial
     rclcpp
     sensor_msgs
     cv_bridge
+    lac_interfaces
 )
-
 
 # Link OpenCV and ORB_SLAM3
 target_link_libraries(ros_mono_inertial
@@ -71,11 +75,6 @@ target_link_options(ros_mono_inertial PRIVATE
 add_executable(ros_stereo_inertial ${SOURCES_STEREO})
 
 # Link dependencies for ros_stereo_inertial
-ament_target_dependencies(ros_stereo_inertial
-    rclcpp
-    sensor_msgs
-    cv_bridge
-)
 
 # Link OpenCV and ORB_SLAM3
 target_link_libraries(ros_stereo_inertial
@@ -85,6 +84,13 @@ target_link_libraries(ros_stereo_inertial
     pthread
     boost_system
     boost_filesystem
+)
+
+ament_target_dependencies(ros_stereo_inertial
+    rclcpp
+    sensor_msgs
+    cv_bridge
+    lac_interfaces
 )
 
 target_link_options(ros_stereo_inertial PRIVATE 
